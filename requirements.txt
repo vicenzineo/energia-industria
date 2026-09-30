@@ -3,3 +3,4 @@ openpyxl
 fg-data-profiling
 setuptools<82
 openpyxl
+pyarrow
