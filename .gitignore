@@ -6,4 +6,4 @@ __pycache__/
 kaggle.json
 relatorios/*
 .vscode/*
-!dados/prata/proveniencia.jsonl
+!prata/proveniencia.jsonl

@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import pandas as pd
+from limpeza import tirar_espacos, chave_texto, variacao_percentual
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,6 +22,8 @@ def tratar_consumo(df):
     df = df.copy()
 
     linhas_antes = len(df)
+
+    df = tirar_espacos(df)
 
     df["Data"] = pd.to_datetime(
         df["Data"].astype(str),
@@ -43,21 +46,32 @@ def tratar_consumo(df):
         errors="coerce"
     )
 
-    df = df[df["Data"].dt.year >= 2012].copy()
-    df = df[df["Data"].dt.year != 2020].copy()
-    df = df[df["Data"].dt.year < 2026].copy()
+    df = df[
+        (df["Data"].dt.year >= 2012) &
+        (df["Data"].dt.year != 2020) &
+        (df["Data"].dt.year < 2026)
+    ].copy()
 
-    df = df.drop(
-        columns=[
-            "Regiao",
-            "Sistema",
-            "DataVersao"
-        ]
-    )
+    df = df.drop(columns=["Regiao", "Sistema", "DataVersao", "DataExcel"])
 
     df = df.drop_duplicates()
 
-    print(f"Consumo: {linhas_antes} -> {len(df)} linhas")
+    df = df.sort_values(
+    ["Classe", "TipoConsumidor", "Data"]
+    )
+
+    df = variacao_percentual(
+        df,
+        grupo=["Classe", "TipoConsumidor"],
+        coluna_valor="Consumo"
+    )
+
+    df["Ano"] = df["Data"].dt.year.astype("Int64")
+    df["Mes"] = df["Data"].dt.month.astype("Int64")
+
+    print(
+        f"Consumo: {linhas_antes} -> {len(df)} linhas"
+    )
 
     return df
 
@@ -65,6 +79,8 @@ def tratar_producao(df):
     df = df.copy()
 
     linhas_antes = len(df)
+
+    df = tirar_espacos(df)
 
     df["Ano"] = pd.to_numeric(
         df["Ano"],
@@ -86,33 +102,23 @@ def tratar_producao(df):
         errors="coerce"
     )
 
-    print("\nValores de Local:")
-    print(df["Local"].value_counts(dropna=False))
-
     df = df.drop(columns=["Local"])
-
-    ausentes = df.isna().sum()
-
-    print("\nAusentes na produção:")
-    print(ausentes[ausentes > 0])
-
-    duplicados = df.duplicated().sum()
-
-    print(f"Duplicados exatos na produção: {duplicados}")
 
     df = df.drop_duplicates()
 
-    valores_invalidos = (df["Valor"] <= 0).sum()
-
-    print(
-        f"Valores de produção menores ou iguais a zero: "
-        f"{valores_invalidos}"
+    df = df.sort_values(
+    ["Atividade", "Ano", "Mes"]
     )
 
-    print("\nAnos presentes na produção:")
-    print(sorted(df["Ano"].dropna().unique()))
+    df = variacao_percentual(
+        df,
+        grupo=["Atividade"],
+        coluna_valor="Valor"
+    )
 
-    print(f"\nProdução: {linhas_antes} -> {len(df)} linhas")
+    print(
+        f"\nProdução: {linhas_antes} -> {len(df)} linhas"
+    )
 
     return df
 
@@ -152,6 +158,36 @@ def validar_dados(consumo, producao):
 
     print("\nPeríodo da produção:")
     print(producao["Data"].min(), "até", producao["Data"].max())
+
+    print("\nAusentes no consumo:")
+    print(consumo.isna().sum()[consumo.isna().sum() > 0])
+
+    print("\nAusentes na produção:")
+    print(producao.isna().sum()[producao.isna().sum() > 0])
+
+    print("\nConsistência temporal do consumo:")
+
+    inconsistencias = (
+        (consumo["Data"].dt.year != consumo["Ano"]) |
+        (consumo["Data"].dt.month != consumo["Mes"])
+    ).sum()
+
+    print(
+        f"Registros com inconsistência entre Data, Ano e Mes: "
+        f"{inconsistencias}"
+    )
+
+    print("\nConsistência temporal da produção:")
+
+    inconsistencias = (
+        (producao["Data"].dt.year != producao["Ano"]) |
+        (producao["Data"].dt.month != producao["Mes"])
+    ).sum()
+
+    print(
+        f"Registros com inconsistência entre Data, Ano e Mes: "
+        f"{inconsistencias}"
+    )
 
 def salvar_parquet(consumo, producao):
 
@@ -202,7 +238,20 @@ def registrar_proveniencia(
             "producao_antes": producao_antes,
             "producao_depois": producao_depois
         },
-
+        "atributos_derivados": [
+        {
+            "nome": "VariacaoPct",
+            "fonte": "consumo",
+            "calculo": "Variação percentual do Consumo em relação à observação anterior do mesmo grupo.",
+            "grupo": ["Classe", "TipoConsumidor"]
+        },
+        {
+            "nome": "VariacaoPct",
+            "fonte": "producao",
+            "calculo": "Variação percentual do Valor em relação à observação anterior da mesma atividade.",
+            "grupo": ["Atividade"]
+        }
+        ],
         "decisoes": [
             "Conversão das colunas de data para datetime.",
             "Conversão das variáveis numéricas para tipos numéricos.",
@@ -213,10 +262,16 @@ def registrar_proveniencia(
             "pois não existem dados correspondentes na produção industrial.",
             "Remoção da coluna DataVersao do consumo por ser constante "
             "e representar a versão/data de aquisição da fonte.",
+            "Remoção da coluna DataExcel do consumo por ser equivalente a Data",
             "Remoção da coluna Local da produção por ser constante "
             "com o valor Brasil.",
             "Remoção de duplicados exatos.",
-            "Valores extremos não foram removidos automaticamente."
+            "Valores extremos não foram removidos automaticamente.",
+            "Padronização de espaços em nomes de colunas e valores textuais.",
+            "Criação dos atributos derivados de variação percentual.",
+            "Criação das colunas Ano e Mes a partir da data do consumo.",
+            "Variação percentual calculada dentro de cada grupo temporal.",
+            "Os valores textuais de Classe, TipoConsumidor e Atividade foram verificados e não apresentaram inconsistências que justificassem a criação de chaves ou mapas de padronização.",
         ]
     }
 
