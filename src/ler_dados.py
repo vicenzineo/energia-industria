@@ -3,9 +3,9 @@ from pathlib import Path
 import pandas as pd
 
 def carregar():
-    pd.read_excel(CAMINHO2, decimal=",")
-    pd.read_csv(CAMINHO, sep=";", decimal=",", skiprows=4)
-    return pd.read_excel(CAMINHO2, decimal=",")
+    df_excel = pd.read_excel(CAMINHO2, decimal=",")
+    df_csv = pd.read_csv(CAMINHO, sep=";", decimal=",", skiprows=4)
+    return df_csv, df_excel
 
 def conferir_estrutura(df):
     print(df.shape)
@@ -15,4 +15,6 @@ CAMINHO = Path(__file__).resolve().parent.parent / "bronze" / "producao_industri
 CAMINHO2 = Path(__file__).resolve().parent.parent / "bronze" / "Dados_abertos_Consumo_Mensal.xlsx"
 
 if __name__ == "__main__":
-    conferir_estrutura(carregar())
+    df_csv, df_excel = carregar()
+    conferir_estrutura(df_csv)
+    conferir_estrutura(df_excel)

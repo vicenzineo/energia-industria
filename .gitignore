@@ -1,6 +1,8 @@
-dados/prata/*
-dados/ouro/*
+prata/*
+ouro/*
 !dados/**/.gitkeep
 .venv/
 __pycache__/
 kaggle.json
+relatorios/*
+.vscode/*
